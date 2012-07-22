@@ -3,64 +3,63 @@
 #include <stdlib.h>
 #include <time.h>
 
-#define PIECESIZE 4
+/******************************************************************************/
+// Stage 1: pieces, piece orientations, piece States and the Seven Webs
+
 #define NUMPIECES 7
 #define NUMORIENTATIONS 19
 #define NUMCONTROLS 4
 #define BOXSIZE 4
 
-#define WIDTH 10
-#define HEIGHT 4
+#define WIDTH 8
+#define HEIGHT 6
 
-#define LINETRIGGER ((1 << WIDTH) - 1)
 #define FULLHEIGHT (BOXSIZE + HEIGHT)
-#define MAXSTATES (NUMPIECES * (WIDTH - 1) * (FULLHEIGHT - 1) * 4)
-#define MAXDEPTH (HEIGHT * (WIDTH - 1) / PIECESIZE)
-#define MAXOVERLAPS ((BOXSIZE + BOXSIZE - 1) * (BOXSIZE + BOXSIZE - 1) * NUMORIENTATIONS)
 
-char pieceNames[NUMPIECES] = {'O', 'I', 'J', 'L', 'S', 'T', 'Z'};
+#define CACHESOLUTIONS 0
 
 /* Define our piece orientations. This is the right-handed Nintendo Rotation
 System with a raised horizontal I piece, also known as the Original Rotation
 System. There are no wall or floor kicks, for optimisation reasons.
 http://tetris.wikia.com/wiki/ORS */
-short firstOrientationId[NUMPIECES];
-short numOrientations[NUMPIECES] = {1, 2, 4, 4, 2, 4, 2};
+char firstOrientationId[NUMPIECES];
+char numOrientations[NUMPIECES] = {1, 2, 4, 4, 2, 4, 2};
 short allMasks[NUMORIENTATIONS][BOXSIZE] = {
-	{0,6,6,0},  /* O */
-	{0,15,0,0}, /* I */
-	{2,2,2,2},  /* I */
-	{0,14,2,0}, /* J */
-	{4,4,12,0}, /* J */
-	{8,14,0,0}, /* J */
-	{6,4,4,0},  /* J */
-	{0,7,4,0},  /* L */
-	{6,2,2,0},  /* L */
-	{1,7,0,0},  /* L */
-	{2,2,3,0},  /* L */
-	{0,3,6,0},  /* S */
-	{2,3,1,0},  /* S */
-	{0,7,2,0},  /* T */
-	{2,6,2,0},  /* T */
-	{2,7,0,0},  /* T */
-	{2,3,2,0},  /* T */
-	{0,6,3,0},  /* Z */
-	{1,3,2,0}   /* Z */
+	{0, 6, 6, 0}, /* O */
+	{0,15, 0, 0}, /* I */
+	{2, 2, 2, 2}, /* I */
+	{0,14, 2, 0}, /* J */
+	{4, 4,12, 0}, /* J */
+	{8,14, 0, 0}, /* J */
+	{6, 4, 4, 0}, /* J */
+	{0, 7, 4, 0}, /* L */
+	{6, 2, 2, 0}, /* L */
+	{1, 7, 0, 0}, /* L */
+	{2, 2, 3, 0}, /* L */
+	{0, 3, 6, 0}, /* S */
+	{2, 3, 1, 0}, /* S */
+	{0, 7, 2, 0}, /* T */
+	{2, 6, 2, 0}, /* T */
+	{2, 7, 0, 0}, /* T */
+	{2, 3, 2, 0}, /* T */
+	{0, 6, 3, 0}, /* Z */
+	{1, 3, 2, 0}  /* Z */
 };
-
 
 /* There is a static collection of only about 4000 possible positions and
 orientations that a piece can hold in the well. We generate a complete list
-of these. Each one has pointers to all the "next" states obtained by pressing
-a key at this point, as well as as much pre-calculated data as is practical. */
+of these. Each one contains pointers to all the "next" states obtained by pressing
+a key at this point, as well as containing as much pre-calculated data as is practical. */
 struct State {
 	/* irritatingly, every state must know what piece it is, and its
 	orientation */
-	short pieceId, orientationId;
+	char pieceId;
+	char orientationId;
 
 	/* number of grid squares of gap between the top right corner of the well
 	and the top right corner of the 4x4 bounding box of every state */
-	short xPos, yPos;
+	short xPos;
+	short yPos;
 
 	/* number of grid squares of gap between the top right of the 4x4 bounding
 	box and where the piece itself begins */
@@ -79,20 +78,25 @@ struct State {
 	permitted (e.g. attempt to move off side of screen) */
 	struct State * nextPtrs[NUMCONTROLS];
 
-	/* pointers to other states in memory which overlap this one. */
-	// struct State * overlapPtrs[MAXOVERLAPS];
-	// short numOverlaps;
-
 	/* is this state currently reachable (1) or not (0)? */
 	short reachable;
+	
+	/* What's next in this linked list, if anything? (NULL = end) */
+	struct State * successor;
 };
+
+/* Linked list of all possible states. */
+struct State * states = NULL;
+
+/* list of states where new pieces are instantiated. */
+struct State * startPtrs[NUMPIECES];
 
 /* Constructor requires only a piece ID, orientation ID, xPos and yPos.
 Everything else is generated from these. */
-struct State State(short pieceId, short orientationId, short xPos, short yPos) {
+struct State State(char pieceId, char orientationId, short xPos, short yPos) {
 	short maskId = 0;
 	short allMask = 0;
-	short keyId = 0;
+	char keyId = 0;
 	short x, y;
 	short * masks = allMasks[orientationId];
 
@@ -157,6 +161,9 @@ struct State State(short pieceId, short orientationId, short xPos, short yPos) {
 			}
 		}
 	}
+	
+	/* Linked list stuffs */
+	state.successor = NULL;
 
 	return state;
 }
@@ -199,7 +206,7 @@ struct State rotate(struct State state) {
 	short x, y;
 	struct State newP;
 
-	short newOrientationId = state.orientationId + 1;
+	char newOrientationId = state.orientationId + 1;
 	if(newOrientationId >= firstOrientationId[state.pieceId] + numOrientations[state.pieceId]) {
 		newOrientationId = firstOrientationId[state.pieceId];
 	}
@@ -229,17 +236,10 @@ struct State (* controls[NUMCONTROLS])(struct State) = {
 	down
 };
 
-/* complete list of all possible states */
-struct State states[MAXSTATES];
-short numStates = 0;
-
-/* list of states where new pieces are instantiated. */
-struct State * startPtrs[NUMPIECES];
-
 /* compare two States to avoid duplicates in the listing. The only
 distinguishing features are piece ID, orientation, xPos and yPos.
 Everything else is derived. */
-short equal(struct State p1, struct State p2) {
+short sameState(struct State p1, struct State p2) {
 	short maskId;
 	if(p1.pieceId != p2.pieceId) {
 		return 0;
@@ -256,21 +256,482 @@ short equal(struct State p1, struct State p2) {
 	return 1;
 }
 
-/* See if a State already exists in the listing. Return a pointer to it if
+/* See if a State already exists in memory. Return a pointer to it if
 so, NULL if not */
-struct State * find(struct State state) {
-	short stateId;
-	for(stateId = 0; stateId < numStates; stateId++) {
-		if(equal(state, states[stateId]) == 1) {
-			return &states[stateId];
+struct State * locateState(struct State state) {
+	struct State * statePtr = states;
+	while(statePtr != NULL) {
+		if(sameState(state, *statePtr) == 1) {
+			return statePtr;
 		}
+		statePtr = statePtr->successor;
 	}
 	return NULL;
 }
 
+/* Store a State in memory and return a pointer to it. */
+struct State * storeState(struct State state) {
+	struct State * newPtr = malloc(sizeof(struct State));
+
+	/* Is there room? */
+	if(newPtr == NULL) {
+		printf("Ran out of memory.\n");
+		exit(1);
+	}
+
+	*newPtr = state;
+
+	/* List is empty, must be initiated */
+	if(states == NULL) {
+		states = newPtr;
+	}
+	
+	/* List has elements, must find the end of it */
+	else {
+		struct State * statePtr = states;
+		while(statePtr->successor != NULL) {
+			statePtr = statePtr->successor;
+		}
+		statePtr->successor = newPtr;
+	}
+
+	return newPtr;
+}
+
+/* Look up the supplied state in memory and return a pointer to its location
+in memory. If it cannot be found, store it and return the pointer to where it
+was stored. */
+struct State * getStatePtr(struct State state) {
+	struct State * statePtr = locateState(state);
+	if(statePtr == NULL) {
+		statePtr = storeState(state);
+	}
+	return statePtr;
+}
+
+/* build the complete network of piece location possibilities */
+void buildWeb(void) {
+	/* populate the "firstOrientationId" array, so we know when to loop back
+	when rotating any given piece */
+	char pieceId = 0;
+	char orientationId = 0;
+	for(pieceId = 0; pieceId < NUMPIECES; pieceId++) {
+		firstOrientationId[pieceId] = orientationId;
+		orientationId += numOrientations[pieceId];
+	}
+
+	/* new pieces are placed here */
+	short xPosStart = ceil((WIDTH - BOXSIZE) / 2);
+	short yPosStart = 0;
+
+	short stateId = 0;
+	char keyId = 0;
+
+	/* build an exhaustive list of every possible state, and incidentally
+	populate all the "next" pointers, forming an array "states" of NUMPIECES
+	separate directed graphs of piece States. */
+	for(pieceId = 0; pieceId < NUMPIECES; pieceId++) {
+
+		/* start the list */
+		struct State startState = State(pieceId, firstOrientationId[pieceId], xPosStart, yPosStart);
+		struct State * startPtr = getStatePtr(startState);
+
+		/* store for future reference */
+		startPtrs[pieceId] = startPtr;
+
+		/* iterate over a growing list */
+		struct State * statePtr = states;
+		while(statePtr != NULL) {
+
+			/* try every possibly key operation in turn, generating pointers. */
+			for(keyId = 0; keyId < NUMCONTROLS; keyId++) {
+
+				/* What's next in this direction? */
+				struct State nextState = (controls[keyId])(*statePtr);
+
+				/* If nextState is new, it should be put into the array for future
+				reference. */
+				struct State * nextPtr = getStatePtr(nextState);
+
+				/* record this pointer. */
+				statePtr->nextPtrs[keyId] = nextPtr;
+			}
+
+			statePtr = statePtr->successor;
+		}
+	}
+}
+
+/******************************************************************************/
+// Stage 2A: caching of solutions for rapid lookup
+
+#define LINETRIGGER ((1 << WIDTH) - 1)
+
+// Who wins?
+#define AI 0
+#define PLAYER 1
+#define UNKNOWN 2
+
+/* Stores who wins, and what their winning strategy is */
+struct Solution {
+	char whoWins;
+	union {
+		char killerPieceId;
+		struct State * magicLandings[NUMPIECES];
+	} strat;
+};
+
+struct Solution Solution(char whoWins, char killerPieceId, struct State ** magicLandings) {
+	struct Solution solution;
+
+	/* who wins? */
+	solution.whoWins = whoWins;
+
+	/* And how? */
+	if(whoWins == AI) {
+		solution.strat.killerPieceId = killerPieceId;
+	}
+
+	if(whoWins == PLAYER) {
+		char pieceId;
+		for(pieceId = 0; pieceId < NUMPIECES; pieceId++) {
+			solution.strat.magicLandings[pieceId] = magicLandings[pieceId];
+		}
+	}
+	
+	return solution;
+}
+
+/* Rudimentary constant-time lookup table for well solutions. */
+struct Node {
+	union {
+		struct Node * nodePtr;
+		struct Solution * solutionPtr;
+	} children[LINETRIGGER];
+};
+
+/* Place from which all wells originate. Has to be populated at run time */
+struct Node * rootNodePtr = NULL;
+
+/* Store a new empty Node with all null pointers in memory, and return a
+pointer to the location of this Node in memory */
+struct Node * storeNode() {
+	struct Node * nodePtr = malloc(sizeof(struct Node));
+	
+	/* Is there room? */
+	if(nodePtr == NULL) {
+		printf("Ran out of memory.\n");
+		exit(1);
+	}
+	
+	short b;
+	for(b = 0; b < LINETRIGGER; b++) {
+		nodePtr->children[b].nodePtr = NULL;
+	}
+	return nodePtr;
+}
+
+/* 1 if same, 0 if different */
+short sameWell(short * w1, short * w2) {
+	short y;
+	for(y = FULLHEIGHT - 1; y >= 0; y--) {
+		if(w1[y] != w2[y]) {
+			return 0;
+		}
+	}
+	return 1;
+}
+
+/* See if a Solution to the supplied well already exists in memory. Return
+who wins: AI, PLAYER or UNKNOWN. */
+char getCachedWinner(short * well) {
+	struct Node * nodePtr = rootNodePtr;
+	short y;
+	
+	for(y = 0; y < FULLHEIGHT - 1; y++) {
+		/* intermediate layer missing */
+		if(nodePtr->children[well[y]].nodePtr == NULL) {
+			return UNKNOWN;
+		}
+		nodePtr = nodePtr->children[well[y]].nodePtr;
+	}
+
+	/* all layers present: no solution: UNKNOWN */
+	if(nodePtr->children[well[FULLHEIGHT - 1]].solutionPtr == NULL) {
+		return UNKNOWN;
+	}
+
+	return nodePtr->children[well[FULLHEIGHT - 1]].solutionPtr->whoWins;
+}
+
+/* Store the solution to the supplied well in memory and return a pointer to
+its new location. */
+struct Solution * cacheSolution(short * well, struct Solution solution) {
+
+	/* First, save the solution. */
+	struct Solution * solutionPtr = malloc(sizeof(struct Solution));
+
+	/* Is there room? */
+	if(solutionPtr == NULL) {
+		printf("Ran out of memory.\n");
+		exit(1);
+	}
+
+	*solutionPtr = solution;
+	
+	/* Then save the well result. */
+	struct Node * nodePtr = rootNodePtr;
+	short y;
+	for(y = 0; y < FULLHEIGHT - 1; y++) {
+		if(nodePtr->children[well[y]].nodePtr == NULL) {
+			nodePtr->children[well[y]].nodePtr = storeNode();
+		}
+		nodePtr = nodePtr->children[well[y]].nodePtr;
+	}
+	nodePtr->children[well[FULLHEIGHT - 1]].solutionPtr = solutionPtr;
+
+	return solutionPtr;
+}
+
+/******************************************************************************/
+// Stage 2B: actually computing all the reachable wells and Solutions for each
+
+/* is there room in this well for a piece in this state (0) or is there an
+obstruction (1) ? */
+short collision(short * well, struct State * statePtr) {
+	short y;
+	for(y = statePtr->yTop; y < statePtr->yBottom; y++) {
+		if(well[y] & statePtr->grid[y]) {
+			return 1;
+		}
+	}
+	return 0;
+}
+
+/* Encapsulates a pointer to a State which constitutes a landing location */
+struct Landing {
+	/* Pointer to the landing State */
+	struct State * statePtr;
+	
+	/* Successor in this linked list */
+	struct Landing * successor;
+};
+
+/* Constructor for a Landing */
+struct Landing Landing(struct State * statePtr) {
+	struct Landing landing;
+	landing.statePtr = statePtr;
+	landing.successor = NULL;
+	return landing;
+}
+
+/* given where we are currently, find all reachable legitimate (i.e. non-deadly)
+landing sites, recursively. If a line can be made here, return a pointer to the
+landing state where this happens. If not, populate the full list and return
+NULL */
+struct State * getLinePtr(short * well,	struct State * statePtr, struct Landing ** attachPointLoc) {
+	char keyId;
+	short y;
+	struct State * nextStatePtr = NULL;
+
+	/* this state is reachable... */
+	statePtr->reachable = 1;
+
+	/* and investigate the rest */
+	for(keyId = 0; keyId < NUMCONTROLS; keyId++) {
+		nextStatePtr = statePtr->nextPtrs[keyId];
+
+		/* can't move down from here and not dead? it's a landing site */
+		if(
+			   controls[keyId] == down
+			&& statePtr->yTop >= BOXSIZE
+			&& (
+				   nextStatePtr == statePtr
+				|| collision(well, nextStatePtr) == 1
+			)
+		) {
+
+			/* has a line been made? */
+			for(y = statePtr->yTop; y < statePtr->yBottom; y++) {
+				/* a line has been made! */
+				if((well[y] | statePtr->grid[y]) == LINETRIGGER) {
+					return statePtr;
+				}
+			}
+
+			/* no line, boring. Save this landing state to memory. */
+			
+			/* Make a space in memory for this landing state */
+			struct Landing * newPtr = malloc(sizeof(struct Landing));
+
+			/* Is there room? */
+			if(newPtr == NULL) {
+				printf("Ran out of memory.\n");
+				exit(1);
+			}
+
+			/* Put this landing into that space in memory */
+			*newPtr = Landing(statePtr);
+
+			/* attach it to the attach point */
+			(*attachPointLoc)->successor = newPtr;
+			
+			/* new attach point is next link down the chain */
+			*attachPointLoc = newPtr;
+		}
+
+		/* what locations could be next? */
+		if(
+			   nextStatePtr->reachable == 0
+			&& collision(well, nextStatePtr) == 0
+			// && nextStatePtr != statePtr // statePtr was marked reachable just above
+		) {
+			struct State * linePtr = getLinePtr(well, nextStatePtr, attachPointLoc);
+			if(linePtr != NULL) {
+				return linePtr;
+			}
+		}
+	}
+	
+	// If we get all the way here then no line can be made using this piece
+	return NULL;
+}
+
+struct State * getMagicLanding(short *, char);
+char solve(short *);
+
+void freeLandings(struct Landing * landing) {
+	while(landing != NULL) {
+		struct Landing * successor = landing->successor;
+		free(landing);
+		landing = successor;
+	}
+}
+
+void show(short *, struct State *);
+
+/* Find a landing state where landing the current piece would result in an
+immediate line (or, if the player plays rationally afterwards, an eventual
+guaranteed line) and return a pointer to that state. If no such state can be
+found, return NULL. */
+struct State * getMagicLanding(short * well, char pieceId) {
+
+	/* assume everything is unreachable */
+	struct State * statePtr = states;
+	while(statePtr != NULL) {
+		statePtr->reachable = 0;
+		statePtr = statePtr->successor;
+	}
+
+	/* Origin point for a linked list of Landings. This first entry doesn't count,
+	it just serves as an anchor for more. Having a dummy first entry causes
+	substantially fewer headaches */
+	struct Landing anchor = Landing(NULL);
+	
+	/* In order for getLinePtr() to be able to expand the linked list, it must
+	know where to find it */
+	struct Landing * attachPoint = &anchor;
+
+	/* Is it possible to get an immediate line? If so, return that landing
+	state */
+	struct State * magicLanding = getLinePtr(well, startPtrs[pieceId], &attachPoint);
+	if(magicLanding != NULL) {
+		freeLandings(&anchor);
+		return magicLanding;
+	}
+	
+	/* Otherwise, iterate over all landing sites looking for further strategy */
+	short stateId = 0;
+	short y = 0;
+	struct Landing * landingPtr = anchor.successor; // skip the first one
+	while(landingPtr != NULL) {
+		statePtr = landingPtr->statePtr;
+
+		// show(well, statePtr);
+		// getchar();
+
+		/* add the piece to the well */
+		/* check out the high optimisation here */
+		for(y = statePtr->yTop; y < statePtr->yBottom; y++) {
+			well[y] |= statePtr->grid[y];
+		}
+		
+		char whoWins = solve(well);
+
+		/* undo that well modification */
+		for(y = statePtr->yBottom-1; y >= statePtr->yTop; y--) {
+			well[y] &= ~statePtr->grid[y];
+		}
+
+		/* PLAYER wins? This landing position is magic! Return it! */
+		if(whoWins == PLAYER) {
+			freeLandings(&anchor);
+			return statePtr;
+		}
+		
+		/* AI wins: continue */
+		
+		landingPtr = landingPtr->successor;
+	}
+
+	/* if we reach this stage then there is no way that a player can force a
+	line after this point - the player dies with no lines. */
+	freeLandings(&anchor);
+	return NULL;
+}
+
+/* Supplied with a well, either look up the Solution that has already been
+calculated for this well, or compute it from scratch. A Solution explains who
+can force a win and what their strategy is. Return a pointer to the Solution's
+location in memory. */
+char solve(short * well) {
+
+#if CACHESOLUTIONS == 1
+	/* Look up the result from this well in the memo table. */
+	char whoWins = getCachedWinner(well);
+
+	/* Success! Return pointer to the result */
+	if(whoWins != UNKNOWN) {
+		return whoWins;
+	}
+#endif
+
+	/* Failure? Too bad, have to calculate the result manually and save it
+	ourselves */
+
+	char pieceId;
+	struct State * magicLandings[NUMPIECES];
+	for(pieceId = 0; pieceId < NUMPIECES; pieceId++) {
+		magicLandings[pieceId] = getMagicLanding(well, pieceId);
+		
+		if(magicLandings[pieceId] == NULL) {
+
+			/* AI wins by supplying this piece */
+#if CACHESOLUTIONS == 1
+			cacheSolution(well, Solution(AI, pieceId, NULL));
+#endif
+
+			return AI;
+		}
+	}
+
+	/* PLAYER wins by landing each piece in the magic location */
+#if CACHESOLUTIONS == 1
+	cacheSolution(well, Solution(PLAYER, -1, magicLandings));
+#endif
+
+	return PLAYER;
+}
+
+/******************************************************************************/
+// Stage 3: Printing stuff out
+
+char pieceNames[NUMPIECES] = {'O', 'I', 'J', 'L', 'S', 'T', 'Z'};
+
 /* show details about this state */
 void print(struct State * statePtr) {
-	short y, keyId;
+	short y;
+	char keyId;
 	printf("I am piece %c in orientation %d @ %d\n", pieceNames[statePtr->pieceId], statePtr->orientationId, statePtr);
 	printf("(xPos, yPos) is (%d, %d)\n", statePtr->xPos, statePtr->yPos);
 	printf("(xOffset, yOffset) is (%d, %d)\n", statePtr->xOffset, statePtr->yOffset);
@@ -281,15 +742,11 @@ void print(struct State * statePtr) {
 	for(y = statePtr->yTop; y < statePtr->yBottom; y++) {
 		printf("grid[%d] is %d\n", y, statePtr->grid[y]);
 	}
-	// printf("I overlap with %d states including myself\n", statePtr->numOverlaps);
 	return;
 }
 
-/* store piece configurations */
-short well[FULLHEIGHT];
-
 /* show the state as it appears in the well */
-void show(struct State * statePtr) {
+void show(short * well, struct State * statePtr) {
 	short x, y;
 
 	system("cls");
@@ -338,298 +795,123 @@ void show(struct State * statePtr) {
 	return;
 }
 
-/* Do the two indicated states overlap (1) or not (0)? */
-short overlap(struct State * statePtr1, struct State * statePtr2) {
-	short y;
-	for(y = 0; y < FULLHEIGHT; y++) {
-		if(statePtr1->grid[y] & statePtr2->grid[y]) {
-			return 1;
+/* Show who wins a given well, and how. */
+void showSolution(short * well, struct Solution * solutionPtr) {
+
+	/* PLAYER wins */
+	if(solutionPtr->whoWins == PLAYER) {
+		char pieceId;
+		for(pieceId = 0; pieceId < NUMPIECES; pieceId++) {
+			show(well, solutionPtr->strat.magicLandings[pieceId]);
+			printf("If the AI gives you piece %c, land it here\n", pieceNames[pieceId]);
+			getchar();
 		}
 	}
-	return 0;
-}
 
-/* populate the supplied state with all of the others that it overlaps. */
-// void populateOverlappers(struct State * statePtr) {
-	// statePtr->numOverlaps = 0;
-	// short stateId;
-	// for(stateId = 0; stateId < numStates; stateId++) {
-		// if(overlap(statePtr, &states[stateId])) {
-			// if(statePtr->numOverlaps >= MAXOVERLAPS) {
-				// printf("Ran out of space for overlaps.");
-				// exit(1);
-			// }
-			// statePtr->overlapPtrs[statePtr->numOverlaps] = &states[stateId];
-			// statePtr->numOverlaps++;
-		// }
-	// }
-// }
-
-/* build the complete network of piece location possibilities */
-void buildWeb(void) {
-	/* new pieces are placed here */
-	short xPosStart = ceil((WIDTH - BOXSIZE) / 2);
-	short yPosStart = 0;
-
-	struct State state;
-	struct State * nextPtr;
-
-	short stateId = 0;
-	short pieceId = 0;
-	short keyId = 0;
-
-	/* populate the "firstOrientationId" array, so we know when to loop back
-	when rotating any given piece */
-	short orientationId = 0;
-	for(pieceId = 0; pieceId < NUMPIECES; pieceId++) {
-		firstOrientationId[pieceId] = orientationId;
-		orientationId += numOrientations[pieceId];
-	}
-
-	/* build an exhaustive list of every possible state, and incidentally
-	populate all the "next" pointers, forming an array "states" of NUMPIECES
-	separate directed graphs of piece States. */
-	for(pieceId = 0; pieceId < NUMPIECES; pieceId++) {
-
-		/* start the list */
-		state = State(pieceId, firstOrientationId[pieceId], xPosStart, yPosStart);
-		nextPtr = find(state);
-		if(nextPtr == NULL) {
-			if(numStates == MAXSTATES) {
-				printf("Ran out of space for states.\n");
-				exit(1);
-			}
-			states[numStates] = state;
-			nextPtr = &states[numStates];
-			numStates++;
-
-			/* store for future reference */
-			startPtrs[pieceId] = nextPtr;
-		}
-
-		/* iterate over a growing list */
-		while(stateId < numStates) {
-
-			/* try every possibly key operation in turn, generating pointers. */
-			for(keyId = 0; keyId < NUMCONTROLS; keyId++) {
-
-				state = (controls[keyId])(states[stateId]);
-				nextPtr = find(state);
-
-				/* If state is new, it should be put into the array for future
-				reference. */
-				if(nextPtr == NULL) {
-					if(numStates == MAXSTATES) {
-						printf("Ran out of space for states.\n");
-						exit(1);
-					}
-					states[numStates] = state;
-					nextPtr = &states[numStates];
-					numStates++;
-				}
-
-				/* record this pointer. */
-				states[stateId].nextPtrs[keyId] = nextPtr;
-			}
-
-			stateId++;
-		}
+	/* AI wins */	
+	if(solutionPtr->whoWins == AI) {
+		show(well, NULL);
+		printf("An evil AI can always kill you with no lines from this position, if it gives you piece %c\n", pieceNames[solutionPtr->strat.killerPieceId]);
+		getchar();
 	}
 	
-	/* populate each State with all of the other states which it overlaps. */
-	// for(stateId = 0; stateId < numStates; stateId++) {
-		// populateOverlappers(&states[stateId]);
-	// }
+	return;
 }
 
-/* is there room in this well for a piece in this state (0) or is there an
-obstruction (1) ? */
-short collision(struct State * statePtr) {
-	short y;
-	for(y = statePtr->yTop; y < statePtr->yBottom; y++) {
-		if(well[y] & statePtr->grid[y]) {
-			return 1;
-		}
-	}
-	return 0;
-}
-
-short depth = 0;
-struct State * getMagicLandingPtr(struct State *);
-short getKillerPiece();
-struct State * landingPtrs[MAXDEPTH][MAXSTATES];
-
-/* given where we are currently, find all reachable legitimate (i.e. non-deadly)
-landing sites, recursively. If a line can be made here, return a pointer to the
-landing state where this happens. If not, populate the full list and return
-NULL */
-struct State * getLinePtr(short * numLandingsPtr, struct State * statePtr) {
-	short keyId, y;
-
-	/* this state is reachable... */
-	statePtr->reachable = 1;
-
-	/* and investigate the rest */
-	for(keyId = 0; keyId < NUMCONTROLS; keyId++) {
-
-		/* can't move down from here and not dead? it's a landing site */
-		if(
-			   controls[keyId] == down
-			&& (
-				   statePtr->nextPtrs[keyId] == statePtr
-				|| collision(statePtr->nextPtrs[keyId]) == 1
-			)
-			&& statePtr->yTop >= BOXSIZE
-		) {
-
-			/* has a line been made? */
-			for(y = statePtr->yTop; y < statePtr->yBottom; y++) {
-				/* a line has been made! */
-				if((well[y] | statePtr->grid[y]) == LINETRIGGER) {
-					// show(statePtr);
-					// printf("You can get a line from this position with this piece\n");
-					// getchar();
-					return statePtr;
-				}
+/* Count all the Solutions that were computed */
+long countSolutions(struct Node * nodePtr, short y) {
+	long numWells = 0;
+	short b;
+	for(b = 0; b < LINETRIGGER; b++) {
+		if(y == FULLHEIGHT - 1) {
+			if(nodePtr->children[b].solutionPtr != NULL) {
+				numWells++;
 			}
-
-			/* no line, boring */
-			landingPtrs[depth][*numLandingsPtr] = statePtr;
-			(*numLandingsPtr)++;
-		}
-
-		/* what locations could be next? */
-		if(
-			   statePtr->nextPtrs[keyId] != statePtr
-			&& collision(statePtr->nextPtrs[keyId]) == 0
-			&& (statePtr->nextPtrs[keyId])->reachable == 0
-		) {
-			struct State * linePtr = getLinePtr(numLandingsPtr, statePtr->nextPtrs[keyId]);
-			if(linePtr != NULL) {
-				return linePtr;
+		}	else {
+			if(nodePtr->children[b].nodePtr != NULL) {
+				numWells += countSolutions(nodePtr->children[b].nodePtr, y+1);
 			}
 		}
 	}
-	return NULL;
+
+	return numWells;
 }
 
-/* Find a landing state where landing the current piece would result in an
-immediate line (or, if the player plays rationally afterwards, an eventual
-guaranteed line) and return a pointer to that state. If no such state can be
-found, return NULL. */
-struct State * getMagicLandingPtr(struct State * statePtr) {
-	short stateId, j, y, numLandings = 0;
+/* show all the Solutions that were computed (this is magical recursive fun) */
+void showSolutions(short * well, struct Node * nodePtr, short y) {
 
-	// show(statePtr);
-	// printf("Finding the rational landing state for this piece\n");
-	// getchar();
-
-	/* assume everything is unreachable */
-	for(stateId = 0; stateId < numStates; stateId++) {
-		states[stateId].reachable = 0;
-	}
-
-	/* explore */
-	struct State * magicLandingPtr = getLinePtr(&numLandings, statePtr);
-	if(magicLandingPtr != NULL) {
-		return magicLandingPtr;
-	}
-
-	/* iterate over all landing sites */
-	for(stateId = 0; stateId < numLandings; stateId++) {
-
-		// show(landingPtrs[depth][stateId]);
-		// printf("Landing site %d of %d\n", stateId+1, numLandings);
-		// getchar();
-
-		/* add the piece to the well */
-		/* check out the high optimisation here */
-		for(y = landingPtrs[depth][stateId]->yTop; y < landingPtrs[depth][stateId]->yBottom; y++) {
-			well[y] |= landingPtrs[depth][stateId]->grid[y];
-		}
-
-		/* recurse in this new well state */
-		depth++;
-		if(getKillerPiece() == -1) {
-			depth--;
-
-			/* undo that well modification */
-			for(y--; y >= landingPtrs[depth][stateId]->yTop; y--) {
-				well[y] &= ~landingPtrs[depth][stateId]->grid[y];
+	short b;
+	for(b = 0; b < LINETRIGGER; b++) {
+		well[y] = b;
+		
+		/* We're at the leaf nodes of the tree: well is fully populated:
+		print it! */
+		if(y == FULLHEIGHT - 1) {
+			if(nodePtr->children[b].solutionPtr != NULL) {
+				showSolution(well, nodePtr->children[b].solutionPtr);
 			}
-
-			return landingPtrs[depth][stateId];
 		}
-
-		depth--;
-
-		/* undo that well modification */
-		for(y--; y >= landingPtrs[depth][stateId]->yTop; y--) {
-			well[y] &= ~landingPtrs[depth][stateId]->grid[y];
+		
+		/* Recurse into the next layer of trees */
+		else {
+			if(nodePtr->children[b].nodePtr != NULL) {
+				showSolutions(well, nodePtr->children[b].nodePtr, y+1);
+			}
 		}
 	}
 
-	/* if we reach this stage then there is no way that a player can force a
-	line after this point - the player dies with no lines. */
-	// if(depth == 0) {
-		// show(statePtr);
-		// printf("Depth %d: AI wins if it gives you this piece\n", depth);
-		// getchar();
-	// }
-	return NULL;
+	return;
 }
 
-/* Can a rational player starting from the current well configuration always
-force a line? (-1) or can an evil AI always kill you with no lines? (return ID
-of killer piece, 0 to 6) */
-short getKillerPiece() {
-	short pieceId;
-	struct State * magiclandingPtrs[NUMPIECES];
+void showAllSolutions() {
+	printf("Number of wells: %d\n", countSolutions(rootNodePtr, 0));
+	getchar();
 
-	for(pieceId = 0; pieceId < NUMPIECES; pieceId++) {
-		magiclandingPtrs[pieceId] = getMagicLandingPtr(startPtrs[pieceId]);
-		if(magiclandingPtrs[pieceId] == NULL) {
-			return pieceId;
-		}
-	}
-
-	// if(depth == 0) {
-		// for(pieceId = 0; pieceId < NUMPIECES; pieceId++) {
-			// show(magiclandingPtrs[pieceId]);
-			// printf("Depth %d: You can always get a line from this position. If it gives you piece %c, land it here\n", depth, pieceNames[pieceId]);
-			// getchar();
-		// }
-	// }
-	return -1;
-}
-
-/* generate an exhaustive web of linked possible piece positions and
-orientations, then let the user navigate this web */
-void main(int argc, char ** argv) {
-	short result;
-	long start, end;
-
-	/* well initialisation */
+	/* Show all well results */
+	short well[FULLHEIGHT];
 	short y;
 	for(y = 0; y < FULLHEIGHT; y++) {
 		well[y] = 0;
 	}
+	showSolutions(well, rootNodePtr, 0);
+}
+
+/******************************************************************************/
+
+/* generate an exhaustive web of linked possible piece positions and
+orientations, then let the PLAYER navigate this web */
+void main(int argc, char ** argv) {
 
 	/* map all possibilities */
 	buildWeb();
-
-	/* current well is empty */
-	start = time(NULL);
-	result = getKillerPiece();
-	end = time(NULL);
-
-	show(NULL);
-	printf("WIDTH = %d, HEIGHT = %d\n", WIDTH, HEIGHT);
-	if(result == -1) {
-		printf("You can always get a line\n");
-	} else {
-		printf("Depth %d: An evil AI can always kill you with no lines from this position, if it gives you piece %c\n", depth, pieceNames[result]);
+	
+	rootNodePtr = storeNode();
+	
+	/* Initialise well to emptiness state */
+	short well[FULLHEIGHT];
+	short y;
+	for(y = 0; y < FULLHEIGHT; y++) {
+		well[y] = 0;
 	}
+	
+	/* solve the empty well */
+	long start = time(NULL);
+	printf("Execution starting at %s\n", asctime(localtime(&start)));
+	char whoWins = solve(well);
+	long end = time(NULL);
+
+	/* Output */
+	printf("WIDTH = %d, HEIGHT = %d\n", WIDTH, HEIGHT);
+	if(whoWins == AI    ) { printf("AI wins\n"    ); }
+	if(whoWins == PLAYER) { printf("PLAYER wins\n"); }
 	printf("Processing took %d second(s)\n", end - start);
+	getchar();
+
+
+#if CACHESOLUTIONS == 1
+	/* Show all well results */
+	showAllSolutions();
+#endif
+
 	return 0;
 }
