@@ -166,12 +166,12 @@ struct State constructState(short pieceId, short orientationId, short xPos, shor
 /* show details about this state */
 void print(struct State * statePtr) {
 	short y, keyId;
-	printf("I am piece #%d, '%c', in orientation %d @ %d\n", statePtr->pieceId, pieceNames[statePtr->pieceId], statePtr->orientationId, statePtr);
+	printf("I am piece #%d, '%c', in orientation %d @ %p\n", statePtr->pieceId, pieceNames[statePtr->pieceId], statePtr->orientationId, statePtr);
 	printf("(xPos, yPos) is (%d, %d)\n", statePtr->xPos, statePtr->yPos);
 	printf("(xOffset, yOffset) is (%d, %d)\n", statePtr->xOffset, statePtr->yOffset);
 	printf("(xDim, yDim) is (%d, %d)\n", statePtr->xDim, statePtr->yDim);
 	for(keyId = 0; keyId < NUMCONTROLS; keyId++) {
-		printf("nextPtrs[%d] is %d\n", keyId, statePtr->nextPtrs[keyId]);
+		printf("nextPtrs[%d] is %p\n", keyId, statePtr->nextPtrs[keyId]);
 	}
 	for(y = statePtr->yTop; y < statePtr->yBottom; y++) {
 		printf("grid[%d] is %d\n", y, statePtr->grid[y]);
@@ -265,7 +265,6 @@ struct State down(struct State state) {
 
 /* try to rotate the piece */
 struct State rotate(struct State state) {
-	short x, y;
 	struct State newState;
 
 	short newOrientationId = state.orientationId + 1;
@@ -309,7 +308,6 @@ struct State * startPtrs[NUMPIECES];
 distinguishing features are piece ID, orientation, xPos and yPos.
 Everything else is derived. */
 short equal(struct State p1, struct State p2) {
-	short maskId;
 	if(p1.pieceId != p2.pieceId) {
 		return 0;
 	}
@@ -516,7 +514,7 @@ immediate line (or, if the player plays rationally afterwards, an eventual
 guaranteed line) and return a pointer to that state. If no such state can be
 found, return NULL. */
 struct State * getMagicLandingPtr(struct State * statePtr) {
-	short stateId, j, y, numLandings = 0;
+	short stateId, y, numLandings = 0;
 
 	// show(statePtr);
 	// printf("Finding the rational landing state for this piece\n");
@@ -603,7 +601,7 @@ short getKillerPiece() {
 
 /* generate an exhaustive web of linked possible piece positions and
 orientations, then let the user navigate this web */
-int main(int argc, char ** argv) {
+int main(void) {
 	short result;
 	long start, end;
 
@@ -628,6 +626,6 @@ int main(int argc, char ** argv) {
 	} else {
 		printf("Depth %d: An evil AI can always kill you with no lines from this position, if it gives you piece %c\n", depth, pieceNames[result]);
 	}
-	printf("Processing took %d second(s)\n", end - start);
+	printf("Processing took %ld second(s)\n", end - start);
 	return 0;
 }
