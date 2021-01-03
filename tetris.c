@@ -166,12 +166,12 @@ struct State constructState(short pieceId, short orientationId, short xPos, shor
 /* show details about this state */
 void print(struct State * statePtr) {
 	short y, keyId;
-	printf("I am piece #%d, '%c', in orientation %d @ %d\n", statePtr->pieceId, pieceNames[statePtr->pieceId], statePtr->orientationId, statePtr);
+	printf("I am piece #%d, '%c', in orientation %d @ %p\n", statePtr->pieceId, pieceNames[statePtr->pieceId], statePtr->orientationId, statePtr);
 	printf("(xPos, yPos) is (%d, %d)\n", statePtr->xPos, statePtr->yPos);
 	printf("(xOffset, yOffset) is (%d, %d)\n", statePtr->xOffset, statePtr->yOffset);
 	printf("(xDim, yDim) is (%d, %d)\n", statePtr->xDim, statePtr->yDim);
 	for(keyId = 0; keyId < NUMCONTROLS; keyId++) {
-		printf("nextPtrs[%d] is %d\n", keyId, statePtr->nextPtrs[keyId]);
+		printf("nextPtrs[%d] is %p\n", keyId, statePtr->nextPtrs[keyId]);
 	}
 	for(y = statePtr->yTop; y < statePtr->yBottom; y++) {
 		printf("grid[%d] is %d\n", y, statePtr->grid[y]);
@@ -628,6 +628,6 @@ int main(int argc, char ** argv) {
 	} else {
 		printf("Depth %d: An evil AI can always kill you with no lines from this position, if it gives you piece %c\n", depth, pieceNames[result]);
 	}
-	printf("Processing took %d second(s)\n", end - start);
+	printf("Processing took %ld second(s)\n", end - start);
 	return 0;
 }
