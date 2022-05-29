@@ -203,7 +203,6 @@ struct State down(struct State state) {
 
 /* try to rotate the piece */
 struct State rotate(struct State state) {
-	short x, y;
 	struct State newP;
 
 	char newOrientationId = state.orientationId + 1;
@@ -240,7 +239,6 @@ struct State (* controls[NUMCONTROLS])(struct State) = {
 distinguishing features are piece ID, orientation, xPos and yPos.
 Everything else is derived. */
 short sameState(struct State p1, struct State p2) {
-	short maskId;
 	if(p1.pieceId != p2.pieceId) {
 		return 0;
 	}
@@ -732,12 +730,12 @@ char pieceNames[NUMPIECES] = {'O', 'I', 'J', 'L', 'S', 'T', 'Z'};
 void print(struct State * statePtr) {
 	short y;
 	char keyId;
-	printf("I am piece %c in orientation %d @ %d\n", pieceNames[statePtr->pieceId], statePtr->orientationId, statePtr);
+	printf("I am piece %c in orientation %d @ %p\n", pieceNames[statePtr->pieceId], statePtr->orientationId, statePtr);
 	printf("(xPos, yPos) is (%d, %d)\n", statePtr->xPos, statePtr->yPos);
 	printf("(xOffset, yOffset) is (%d, %d)\n", statePtr->xOffset, statePtr->yOffset);
 	printf("(xDim, yDim) is (%d, %d)\n", statePtr->xDim, statePtr->yDim);
 	for(keyId = 0; keyId < NUMCONTROLS; keyId++) {
-		printf("nextPtrs[%d] is %d\n", keyId, statePtr->nextPtrs[keyId]);
+		printf("nextPtrs[%d] is %p\n", keyId, statePtr->nextPtrs[keyId]);
 	}
 	for(y = statePtr->yTop; y < statePtr->yBottom; y++) {
 		printf("grid[%d] is %d\n", y, statePtr->grid[y]);
@@ -880,7 +878,7 @@ void showAllSolutions() {
 
 /* generate an exhaustive web of linked possible piece positions and
 orientations, then let the PLAYER navigate this web */
-void main(int argc, char ** argv) {
+int main(void) {
 
 	/* map all possibilities */
 	buildWeb();
