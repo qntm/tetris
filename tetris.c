@@ -603,7 +603,7 @@ short getKillerPiece() {
 
 /* generate an exhaustive web of linked possible piece positions and
 orientations, then let the user navigate this web */
-void main(void) {
+int main(void) {
 	short result;
 	long start, end;
 
