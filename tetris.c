@@ -163,73 +163,6 @@ struct State constructState(short pieceId, short orientationId, short xPos, shor
 	return state;
 }
 
-/* show details about this state */
-void print(struct State * statePtr) {
-	short y, keyId;
-	printf("I am piece #%d, '%c', in orientation %d @ %p\n", statePtr->pieceId, pieceNames[statePtr->pieceId], statePtr->orientationId, statePtr);
-	printf("(xPos, yPos) is (%d, %d)\n", statePtr->xPos, statePtr->yPos);
-	printf("(xOffset, yOffset) is (%d, %d)\n", statePtr->xOffset, statePtr->yOffset);
-	printf("(xDim, yDim) is (%d, %d)\n", statePtr->xDim, statePtr->yDim);
-	for(keyId = 0; keyId < NUMCONTROLS; keyId++) {
-		printf("nextPtrs[%d] is %p\n", keyId, statePtr->nextPtrs[keyId]);
-	}
-	for(y = statePtr->yTop; y < statePtr->yBottom; y++) {
-		printf("grid[%d] is %d\n", y, statePtr->grid[y]);
-	}
-	// printf("I overlap with %d states including myself\n", statePtr->numOverlaps);
-	return;
-}
-
-/* show the state as it appears in the well */
-void show(struct State * statePtr) {
-	short x, y;
-
-	// system("cls");
-	printf("+");
-	for(x = 0; x < WIDTH; x++) {
-		printf("-");
-	}
-	printf("+\n");
-	for(y = 0; y < FULLHEIGHT; y++) {
-
-		/* horizontal bar leaves room for full rotations beforehand */
-		if(y == BOXSIZE) {
-			printf("+");
-			for(x = 0; x < WIDTH; x++) {
-				printf("-");
-			}
-			printf("+\n");
-		}
-
-		printf("|");
-		/* have to iterate backwards, from x = 9 to x = 0 */
-		for(x = WIDTH - 1; x >= 0; x--) {
-			if(
-				   statePtr != NULL
-				&& statePtr->grid[y] >> x & 1
-			) {
-				printf("@");
-			} else if(well[y] >> x & 1) {
-				printf("#");
-			} else {
-				printf(".");
-			}
-		}
-		printf("|\n");
-	}
-
-	printf("+");
-	for(x = 0; x < WIDTH; x++) {
-		printf("-");
-	}
-	printf("+\n");
-
-	if(statePtr != NULL) {
-		print(statePtr);
-	}
-	return;
-}
-
 /* return the state after R key */
 struct State right(struct State state) {
 	/* can't shift off the right side of the screen */
@@ -333,6 +266,73 @@ struct State * find(struct State state) {
 		}
 	}
 	return NULL;
+}
+
+/* show details about this state */
+void print(struct State * statePtr) {
+	short y, keyId;
+	printf("I am piece #%d, '%c', in orientation %d @ %p\n", statePtr->pieceId, pieceNames[statePtr->pieceId], statePtr->orientationId, statePtr);
+	printf("(xPos, yPos) is (%d, %d)\n", statePtr->xPos, statePtr->yPos);
+	printf("(xOffset, yOffset) is (%d, %d)\n", statePtr->xOffset, statePtr->yOffset);
+	printf("(xDim, yDim) is (%d, %d)\n", statePtr->xDim, statePtr->yDim);
+	for(keyId = 0; keyId < NUMCONTROLS; keyId++) {
+		printf("nextPtrs[%d] is %p\n", keyId, statePtr->nextPtrs[keyId]);
+	}
+	for(y = statePtr->yTop; y < statePtr->yBottom; y++) {
+		printf("grid[%d] is %d\n", y, statePtr->grid[y]);
+	}
+	// printf("I overlap with %d states including myself\n", statePtr->numOverlaps);
+	return;
+}
+
+/* show the state as it appears in the well */
+void show(struct State * statePtr) {
+	short x, y;
+
+	// system("cls");
+	printf("+");
+	for(x = 0; x < WIDTH; x++) {
+		printf("-");
+	}
+	printf("+\n");
+	for(y = 0; y < FULLHEIGHT; y++) {
+
+		/* horizontal bar leaves room for full rotations beforehand */
+		if(y == BOXSIZE) {
+			printf("+");
+			for(x = 0; x < WIDTH; x++) {
+				printf("-");
+			}
+			printf("+\n");
+		}
+
+		printf("|");
+		/* have to iterate backwards, from x = 9 to x = 0 */
+		for(x = WIDTH - 1; x >= 0; x--) {
+			if(
+				   statePtr != NULL
+				&& statePtr->grid[y] >> x & 1
+			) {
+				printf("@");
+			} else if(well[y] >> x & 1) {
+				printf("#");
+			} else {
+				printf(".");
+			}
+		}
+		printf("|\n");
+	}
+
+	printf("+");
+	for(x = 0; x < WIDTH; x++) {
+		printf("-");
+	}
+	printf("+\n");
+
+	if(statePtr != NULL) {
+		print(statePtr);
+	}
+	return;
 }
 
 /* Do the two indicated states overlap (1) or not (0)? */
