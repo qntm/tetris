@@ -9,7 +9,7 @@
 #define NUMCONTROLS 4
 #define BOXSIZE 4
 
-#define WIDTH 12
+#define WIDTH 10
 #define HEIGHT 4
 
 #define LINETRIGGER ((1 << WIDTH) - 1)
