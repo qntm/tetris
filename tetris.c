@@ -11,8 +11,8 @@
 #define NUMCONTROLS 4
 #define BOXSIZE 4
 
-#define WIDTH 8
-#define HEIGHT 6
+#define WIDTH 10
+#define HEIGHT 4
 
 #define FULLHEIGHT (BOXSIZE + HEIGHT)
 
@@ -80,7 +80,7 @@ struct State {
 
 	/* is this state currently reachable (1) or not (0)? */
 	short reachable;
-	
+
 	/* What's next in this linked list, if anything? (NULL = end) */
 	struct State * successor;
 };
@@ -161,7 +161,7 @@ struct State State(char pieceId, char orientationId, short xPos, short yPos) {
 			}
 		}
 	}
-	
+
 	/* Linked list stuffs */
 	state.successor = NULL;
 
@@ -285,7 +285,7 @@ struct State * storeState(struct State state) {
 	if(states == NULL) {
 		states = newPtr;
 	}
-	
+
 	/* List has elements, must find the end of it */
 	else {
 		struct State * statePtr = states;
@@ -398,7 +398,7 @@ struct Solution Solution(char whoWins, char killerPieceId, struct State ** magic
 			solution.strat.magicLandings[pieceId] = magicLandings[pieceId];
 		}
 	}
-	
+
 	return solution;
 }
 
@@ -417,13 +417,13 @@ struct Node * rootNodePtr = NULL;
 pointer to the location of this Node in memory */
 struct Node * storeNode() {
 	struct Node * nodePtr = malloc(sizeof(struct Node));
-	
+
 	/* Is there room? */
 	if(nodePtr == NULL) {
 		printf("Ran out of memory.\n");
 		exit(1);
 	}
-	
+
 	short b;
 	for(b = 0; b < LINETRIGGER; b++) {
 		nodePtr->children[b].nodePtr = NULL;
@@ -447,7 +447,7 @@ who wins: AI, PLAYER or UNKNOWN. */
 char getCachedWinner(short * well) {
 	struct Node * nodePtr = rootNodePtr;
 	short y;
-	
+
 	for(y = 0; y < FULLHEIGHT - 1; y++) {
 		/* intermediate layer missing */
 		if(nodePtr->children[well[y]].nodePtr == NULL) {
@@ -478,7 +478,7 @@ struct Solution * cacheSolution(short * well, struct Solution solution) {
 	}
 
 	*solutionPtr = solution;
-	
+
 	/* Then save the well result. */
 	struct Node * nodePtr = rootNodePtr;
 	short y;
@@ -512,7 +512,7 @@ short collision(short * well, struct State * statePtr) {
 struct Landing {
 	/* Pointer to the landing State */
 	struct State * statePtr;
-	
+
 	/* Successor in this linked list */
 	struct Landing * successor;
 };
@@ -560,7 +560,7 @@ struct State * getLinePtr(short * well,	struct State * statePtr, struct Landing 
 			}
 
 			/* no line, boring. Save this landing state to memory. */
-			
+
 			/* Make a space in memory for this landing state */
 			struct Landing * newPtr = malloc(sizeof(struct Landing));
 
@@ -575,7 +575,7 @@ struct State * getLinePtr(short * well,	struct State * statePtr, struct Landing 
 
 			/* attach it to the attach point */
 			(*attachPointLoc)->successor = newPtr;
-			
+
 			/* new attach point is next link down the chain */
 			*attachPointLoc = newPtr;
 		}
@@ -592,7 +592,7 @@ struct State * getLinePtr(short * well,	struct State * statePtr, struct Landing 
 			}
 		}
 	}
-	
+
 	// If we get all the way here then no line can be made using this piece
 	return NULL;
 }
@@ -627,7 +627,7 @@ struct State * getMagicLanding(short * well, char pieceId) {
 	it just serves as an anchor for more. Having a dummy first entry causes
 	substantially fewer headaches */
 	struct Landing anchor = Landing(NULL);
-	
+
 	/* In order for getLinePtr() to be able to expand the linked list, it must
 	know where to find it */
 	struct Landing * attachPoint = &anchor;
@@ -639,7 +639,7 @@ struct State * getMagicLanding(short * well, char pieceId) {
 		freeLandings(&anchor);
 		return magicLanding;
 	}
-	
+
 	/* Otherwise, iterate over all landing sites looking for further strategy */
 	short stateId = 0;
 	short y = 0;
@@ -655,7 +655,7 @@ struct State * getMagicLanding(short * well, char pieceId) {
 		for(y = statePtr->yTop; y < statePtr->yBottom; y++) {
 			well[y] |= statePtr->grid[y];
 		}
-		
+
 		char whoWins = solve(well);
 
 		/* undo that well modification */
@@ -668,9 +668,9 @@ struct State * getMagicLanding(short * well, char pieceId) {
 			freeLandings(&anchor);
 			return statePtr;
 		}
-		
+
 		/* AI wins: continue */
-		
+
 		landingPtr = landingPtr->successor;
 	}
 
@@ -703,7 +703,7 @@ char solve(short * well) {
 	struct State * magicLandings[NUMPIECES];
 	for(pieceId = 0; pieceId < NUMPIECES; pieceId++) {
 		magicLandings[pieceId] = getMagicLanding(well, pieceId);
-		
+
 		if(magicLandings[pieceId] == NULL) {
 
 			/* AI wins by supplying this piece */
@@ -808,13 +808,13 @@ void showSolution(short * well, struct Solution * solutionPtr) {
 		}
 	}
 
-	/* AI wins */	
+	/* AI wins */
 	if(solutionPtr->whoWins == AI) {
 		show(well, NULL);
 		printf("An evil AI can always kill you with no lines from this position, if it gives you piece %c\n", pieceNames[solutionPtr->strat.killerPieceId]);
 		getchar();
 	}
-	
+
 	return;
 }
 
@@ -843,7 +843,7 @@ void showSolutions(short * well, struct Node * nodePtr, short y) {
 	short b;
 	for(b = 0; b < LINETRIGGER; b++) {
 		well[y] = b;
-		
+
 		/* We're at the leaf nodes of the tree: well is fully populated:
 		print it! */
 		if(y == FULLHEIGHT - 1) {
@@ -851,7 +851,7 @@ void showSolutions(short * well, struct Node * nodePtr, short y) {
 				showSolution(well, nodePtr->children[b].solutionPtr);
 			}
 		}
-		
+
 		/* Recurse into the next layer of trees */
 		else {
 			if(nodePtr->children[b].nodePtr != NULL) {
@@ -884,16 +884,16 @@ void main(int argc, char ** argv) {
 
 	/* map all possibilities */
 	buildWeb();
-	
+
 	rootNodePtr = storeNode();
-	
+
 	/* Initialise well to emptiness state */
 	short well[FULLHEIGHT];
 	short y;
 	for(y = 0; y < FULLHEIGHT; y++) {
 		well[y] = 0;
 	}
-	
+
 	/* solve the empty well */
 	long start = time(NULL);
 	printf("Execution starting at %s\n", asctime(localtime(&start)));
